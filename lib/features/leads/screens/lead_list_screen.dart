@@ -3,9 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:syncfusion_flutter_datagrid/datagrid.dart';
 import '../../../core/providers/lead_provider.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../core/providers/dashboard_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/theme/custom_widgets.dart';
@@ -25,11 +25,12 @@ class _LeadListScreenState extends ConsumerState<LeadListScreen>
   late TabController _tabController;
   bool _isGridView = true;
   final _searchController = TextEditingController();
+  String _selectedFilter = 'all';
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
   }
 
   @override
@@ -42,8 +43,7 @@ class _LeadListScreenState extends ConsumerState<LeadListScreen>
   @override
   Widget build(BuildContext context) {
     final currentUser = ref.watch(currentUserProvider);
-    final filteredLeads = ref.watch(filteredLeadsProvider);
-    final leadsByStatus = ref.watch(leadsByStatusProvider);
+    final allLeads = ref.watch(leadsForCurrentUserProvider);
     final selectedLeads = ref.watch(selectedLeadsProvider);
     final isLoading = ref.watch(leadManagementLoadingProvider);
 
@@ -55,42 +55,35 @@ class _LeadListScreenState extends ConsumerState<LeadListScreen>
 
         return Scaffold(
           backgroundColor: AppColors.background,
-          appBar: _buildAppBar(selectedLeads),
+          appBar: _buildAppBar(selectedLeads, user),
           body: Column(
             children: [
-              // Search and Filters
+              // Search and Filters Section
               _buildSearchAndFilters()
                   .animate()
                   .fadeIn(duration: 300.ms)
                   .slideY(begin: -0.3, duration: 300.ms),
 
-              // Tab Bar
-              _buildTabBar(leadsByStatus)
+              // Statistics Header
+              _buildStatisticsHeader(allLeads)
                   .animate()
                   .fadeIn(duration: 300.ms, delay: 100.ms),
+
+              // Tab Bar
+              _buildTabBar(allLeads)
+                  .animate()
+                  .fadeIn(duration: 300.ms, delay: 200.ms),
 
               // Content
               Expanded(
                 child: TabBarView(
                   controller: _tabController,
                   children: [
-                    // All Leads
-                    _buildLeadsList(filteredLeads, isLoading),
-                    // Active Leads
-                    _buildLeadsList(
-                      filteredLeads.where((lead) => lead.isActive).toList(),
-                      isLoading,
-                    ),
-                    // Follow-ups
-                    _buildLeadsList(
-                      filteredLeads.where((lead) => lead.hasFollowUpDue).toList(),
-                      isLoading,
-                    ),
-                    // Converted
-                    _buildLeadsList(
-                      filteredLeads.where((lead) => lead.isConverted).toList(),
-                      isLoading,
-                    ),
+                    _buildLeadsList(allLeads, 'all', isLoading),
+                    _buildLeadsList(allLeads, 'active', isLoading),
+                    _buildLeadsList(allLeads, 'followup', isLoading),
+                    _buildLeadsList(allLeads, 'converted', isLoading),
+                    _buildLeadsList(allLeads, 'overdue', isLoading),
                   ],
                 ),
               ),
@@ -108,13 +101,25 @@ class _LeadListScreenState extends ConsumerState<LeadListScreen>
     );
   }
 
-  PreferredSizeWidget _buildAppBar(Set<String> selectedLeads) {
+  PreferredSizeWidget _buildAppBar(Set<String> selectedLeads, UserModel user) {
     final hasSelection = selectedLeads.isNotEmpty;
 
     return AppBar(
+      elevation: 0,
+      backgroundColor: AppColors.surface,
       title: hasSelection
           ? Text('${selectedLeads.length} selected')
-          : const Text('Leads'),
+          : Row(
+        children: [
+          Icon(
+            LucideIcons.target,
+            color: AppColors.primary,
+            size: 24,
+          ),
+          const SizedBox(width: 8),
+          const Text('My Leads'),
+        ],
+      ),
       leading: hasSelection
           ? IconButton(
         onPressed: () => ref.read(selectedLeadsProvider.notifier).clearSelection(),
@@ -122,44 +127,118 @@ class _LeadListScreenState extends ConsumerState<LeadListScreen>
       )
           : null,
       actions: hasSelection
-          ? _buildSelectionActions()
+          ? _buildSelectionActions(user)
           : _buildDefaultActions(),
     );
   }
 
   List<Widget> _buildDefaultActions() {
     return [
+      // View Toggle
       IconButton(
         onPressed: _toggleView,
         icon: Icon(_isGridView ? LucideIcons.list : LucideIcons.grid3x3),
         tooltip: _isGridView ? 'List View' : 'Grid View',
       ),
-      IconButton(
-        onPressed: _showFilterDialog,
-        icon: const Icon(LucideIcons.filter),
-        tooltip: 'Filter',
-      ),
-      IconButton(
-        onPressed: _showSortDialog,
+
+      // Sort
+      PopupMenuButton<String>(
         icon: const Icon(LucideIcons.arrowUpDown),
         tooltip: 'Sort',
+        onSelected: _handleSort,
+        itemBuilder: (context) => [
+          const PopupMenuItem(
+            value: 'updated_desc',
+            child: Row(
+              children: [
+                Icon(LucideIcons.clock, size: 16),
+                SizedBox(width: 8),
+                Text('Recently Updated'),
+              ],
+            ),
+          ),
+          const PopupMenuItem(
+            value: 'created_desc',
+            child: Row(
+              children: [
+                Icon(LucideIcons.plus, size: 16),
+                SizedBox(width: 8),
+                Text('Recently Created'),
+              ],
+            ),
+          ),
+          const PopupMenuItem(
+            value: 'name_asc',
+            child: Row(
+              children: [
+                Icon(LucideIcons.sortAsc, size: 16),
+                SizedBox(width: 8),
+                Text('Name A-Z'),
+              ],
+            ),
+          ),
+          const PopupMenuItem(
+            value: 'status_asc',
+            child: Row(
+              children: [
+                Icon(LucideIcons.flag, size: 16),
+                SizedBox(width: 8),
+                Text('Status'),
+              ],
+            ),
+          ),
+        ],
+      ),
+
+      // More Options
+      PopupMenuButton<String>(
+        icon: const Icon(LucideIcons.moreVertical),
+        onSelected: _handleMenuAction,
+        itemBuilder: (context) => [
+          const PopupMenuItem(
+            value: 'refresh',
+            child: Row(
+              children: [
+                Icon(LucideIcons.refreshCw, size: 16),
+                SizedBox(width: 8),
+                Text('Refresh'),
+              ],
+            ),
+          ),
+          const PopupMenuItem(
+            value: 'export',
+            child: Row(
+              children: [
+                Icon(LucideIcons.download, size: 16),
+                SizedBox(width: 8),
+                Text('Export'),
+              ],
+            ),
+          ),
+        ],
       ),
       const SizedBox(width: 8),
     ];
   }
 
-  List<Widget> _buildSelectionActions() {
+  List<Widget> _buildSelectionActions(UserModel user) {
     return [
+      // Update Status
       IconButton(
         onPressed: _bulkUpdateStatus,
         icon: const Icon(LucideIcons.edit),
         tooltip: 'Update Status',
       ),
-      IconButton(
-        onPressed: _bulkAssign,
-        icon: const Icon(LucideIcons.userPlus),
-        tooltip: 'Assign',
-      ),
+
+      // Assign (if user can assign)
+      if (user.canAssignLeads)
+        IconButton(
+          onPressed: _bulkAssign,
+          icon: const Icon(LucideIcons.userPlus),
+          tooltip: 'Assign',
+        ),
+
+      // Delete
       IconButton(
         onPressed: _bulkDelete,
         icon: const Icon(LucideIcons.trash2, color: AppColors.error),
@@ -178,104 +257,159 @@ class _LeadListScreenState extends ConsumerState<LeadListScreen>
           bottom: BorderSide(color: AppColors.border),
         ),
       ),
-      child: Row(
+      child: Column(
         children: [
-          // Search Field
-          Expanded(
-            child: MinimalTextField(
-              controller: _searchController,
-              hint: 'Search leads...',
-              prefixIcon: LucideIcons.search,
-              onChanged: (value) {
-                ref.read(leadSearchQueryProvider.notifier).state = value;
-              },
+          // Search Bar
+          MinimalTextField(
+            controller: _searchController,
+            hint: 'Search by name, project, phone...',
+            prefixIcon: LucideIcons.search,
+            onChanged: (value) {
+              ref.read(leadSearchQueryProvider.notifier).state = value;
+            },
+          ),
+
+          const SizedBox(height: 12),
+
+          // Quick Filters
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildFilterChip('All', 'all'),
+                _buildFilterChip('Today\'s Follow-ups', 'today'),
+                _buildFilterChip('This Week', 'week'),
+                _buildFilterChip('High Priority', 'priority'),
+                _buildFilterChip('New', 'new'),
+                _buildFilterChip('Hot Leads', 'hot'),
+              ],
             ),
           ),
-
-          const SizedBox(width: 12),
-
-          // Status Filter
-          _buildStatusFilter(),
-
-          const SizedBox(width: 12),
-
-          // Date Filter
-          _buildDateFilter(),
         ],
       ),
     );
   }
 
-  Widget _buildStatusFilter() {
-    final selectedStatus = ref.watch(leadStatusFilterProvider);
+  Widget _buildFilterChip(String label, String value) {
+    final isSelected = _selectedFilter == value;
 
-    return SizedBox(
-      width: 150,
-      child: DropdownButtonFormField<String?>(
-        value: selectedStatus,
-        decoration: const InputDecoration(
-          labelText: 'Status',
-          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        ),
-        items: [
-          const DropdownMenuItem<String?>(
-            value: null,
-            child: Text('All Statuses'),
-          ),
-          ...['New', 'Contacted', 'Follow Up', 'Converted', 'Lost']
-              .map((status) => DropdownMenuItem(
-            value: status,
-            child: Text(status),
-          )),
-        ],
-        onChanged: (value) {
-          ref.read(leadStatusFilterProvider.notifier).state = value;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: FilterChip(
+        label: Text(label),
+        selected: isSelected,
+        onSelected: (selected) {
+          setState(() {
+            _selectedFilter = selected ? value : 'all';
+          });
+          _applyFilter(value);
         },
-      ),
-    );
-  }
-
-  Widget _buildDateFilter() {
-    return OutlinedButton.icon(
-      onPressed: _selectDateRange,
-      icon: const Icon(LucideIcons.calendar, size: 18),
-      label: const Text('Date'),
-    );
-  }
-
-  Widget _buildTabBar(Map<String, List<LeadModel>> leadsByStatus) {
-    final totalLeads = leadsByStatus.values.fold(0, (sum, leads) => sum + leads.length);
-    final activeLeads = leadsByStatus.values
-        .expand((leads) => leads)
-        .where((lead) => lead.isActive)
-        .length;
-    final followUpLeads = leadsByStatus.values
-        .expand((leads) => leads)
-        .where((lead) => lead.hasFollowUpDue)
-        .length;
-    final convertedLeads = leadsByStatus.values
-        .expand((leads) => leads)
-        .where((lead) => lead.isConverted)
-        .length;
-
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(
-          bottom: BorderSide(color: AppColors.border),
+        backgroundColor: AppColors.backgroundSecondary,
+        selectedColor: AppColors.primary.withOpacity(0.1),
+        checkmarkColor: AppColors.primary,
+        labelStyle: AppTextStyles.bodySmall.copyWith(
+          color: isSelected ? AppColors.primary : AppColors.textSecondary,
+          fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
         ),
       ),
-      child: TabBar(
-        controller: _tabController,
-        tabs: [
-          _buildTab('All', totalLeads),
-          _buildTab('Active', activeLeads),
-          _buildTab('Follow-ups', followUpLeads,
-              color: followUpLeads > 0 ? AppColors.warning : null),
-          _buildTab('Converted', convertedLeads,
-              color: convertedLeads > 0 ? AppColors.success : null),
+    );
+  }
+
+  Widget _buildStatisticsHeader(AsyncValue<List<LeadModel>> allLeads) {
+    return allLeads.when(
+      data: (leads) {
+        final total = leads.length;
+        final active = leads.where((l) => l.isActive).length;
+        final converted = leads.where((l) => l.isConverted).length;
+        final followUps = leads.where((l) => l.hasFollowUpDue).length;
+        final conversionRate = total > 0 ? (converted / total * 100) : 0.0;
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: const BoxDecoration(
+            color: AppColors.backgroundSecondary,
+            border: Border(
+              bottom: BorderSide(color: AppColors.border),
+            ),
+          ),
+          child: Row(
+            children: [
+              _buildStatItem('Total', total.toString(), LucideIcons.target),
+              _buildStatItem('Active', active.toString(), LucideIcons.play),
+              _buildStatItem('Converted', converted.toString(), LucideIcons.checkCircle,
+                  color: AppColors.success),
+              _buildStatItem('Follow-ups', followUps.toString(), LucideIcons.clock,
+                  color: followUps > 0 ? AppColors.warning : null),
+              _buildStatItem('Rate', '${conversionRate.toStringAsFixed(1)}%',
+                  LucideIcons.trendingUp, color: AppColors.primary),
+            ],
+          ),
+        );
+      },
+      loading: () => const SizedBox(),
+      error: (_, __) => const SizedBox(),
+    );
+  }
+
+  Widget _buildStatItem(String label, String value, IconData icon, {Color? color}) {
+    return Expanded(
+      child: Column(
+        children: [
+          Icon(
+            icon,
+            size: 16,
+            color: color ?? AppColors.textSecondary,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: AppTextStyles.titleMedium.copyWith(
+              fontWeight: FontWeight.bold,
+              color: color ?? AppColors.textPrimary,
+            ),
+          ),
+          Text(
+            label,
+            style: AppTextStyles.caption.copyWith(
+              color: AppColors.textSecondary,
+            ),
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTabBar(AsyncValue<List<LeadModel>> allLeads) {
+    return allLeads.when(
+      data: (leads) {
+        final total = leads.length;
+        final active = leads.where((l) => l.isActive).length;
+        final followUps = leads.where((l) => l.hasFollowUpDue).length;
+        final converted = leads.where((l) => l.isConverted).length;
+        final overdue = leads.where((l) => l.isFollowUpOverdue).length;
+
+        return Container(
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            border: Border(
+              bottom: BorderSide(color: AppColors.border),
+            ),
+          ),
+          child: TabBar(
+            controller: _tabController,
+            isScrollable: true,
+            tabs: [
+              _buildTab('All', total),
+              _buildTab('Active', active),
+              _buildTab('Follow-ups', followUps, color: followUps > 0 ? AppColors.warning : null),
+              _buildTab('Converted', converted, color: converted > 0 ? AppColors.success : null),
+              _buildTab('Overdue', overdue, color: overdue > 0 ? AppColors.error : null),
+            ],
+          ),
+        );
+      },
+      loading: () => Container(height: 48),
+      error: (_, __) => Container(height: 48),
     );
   }
 
@@ -285,7 +419,7 @@ class _LeadListScreenState extends ConsumerState<LeadListScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(label),
-          const SizedBox(width: 4),
+          const SizedBox(width: 6),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
@@ -305,35 +439,87 @@ class _LeadListScreenState extends ConsumerState<LeadListScreen>
     );
   }
 
-  Widget _buildLeadsList(List<LeadModel> leads, bool isLoading) {
-    if (isLoading) {
-      return const Center(child: MinimalLoader());
-    }
+  Widget _buildLeadsList(AsyncValue<List<LeadModel>> allLeads, String filter, bool isLoading) {
+    return allLeads.when(
+      data: (leads) {
+        final filteredLeads = _filterLeads(leads, filter);
 
-    if (leads.isEmpty) {
-      return const Center(
-        child: EmptyState(
-          icon: LucideIcons.target,
-          title: 'No Leads Found',
-          subtitle: 'Start by adding your first lead or adjust your filters',
-          actionText: 'Add Lead',
-        ),
-      );
-    }
+        if (isLoading) {
+          return const Center(child: MinimalLoader());
+        }
 
-    return RefreshIndicator(
-      onRefresh: () async {
-        ref.read(dashboardRefreshProvider.notifier).refresh();
+        if (filteredLeads.isEmpty) {
+          return _buildEmptyState(filter);
+        }
+
+        return RefreshIndicator(
+          onRefresh: () async {
+            ref.read(dashboardRefreshProvider.notifier).refresh();
+          },
+          child: _isGridView
+              ? _buildGridView(filteredLeads)
+              : _buildListView(filteredLeads),
+        );
       },
-      child: _isGridView ? _buildGridView(leads) : _buildListView(leads),
+      loading: () => const Center(child: MinimalLoader()),
+      error: (error, _) => Center(
+        child: EmptyState(
+          icon: LucideIcons.alertCircle,
+          title: 'Error Loading Leads',
+          subtitle: error.toString(),
+          actionText: 'Retry',
+          onAction: () => ref.refresh(leadsForCurrentUserProvider),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(String filter) {
+    String title, subtitle, actionText;
+    IconData icon;
+
+    switch (filter) {
+      case 'followup':
+        icon = LucideIcons.clock;
+        title = 'No Follow-ups Due';
+        subtitle = 'Great! You\'re caught up with all your follow-ups';
+        actionText = 'Add Lead';
+        break;
+      case 'converted':
+        icon = LucideIcons.checkCircle;
+        title = 'No Converted Leads Yet';
+        subtitle = 'Keep working on your leads to see conversions here';
+        actionText = 'View Active Leads';
+        break;
+      case 'overdue':
+        icon = LucideIcons.alertTriangle;
+        title = 'No Overdue Follow-ups';
+        subtitle = 'Excellent! You\'re staying on top of your follow-ups';
+        actionText = 'Add Lead';
+        break;
+      default:
+        icon = LucideIcons.target;
+        title = 'No Leads Found';
+        subtitle = 'Start building your pipeline by adding your first lead';
+        actionText = 'Add Lead';
+    }
+
+    return Center(
+      child: EmptyState(
+        icon: icon,
+        title: title,
+        subtitle: subtitle,
+        actionText: actionText,
+        onAction: () => context.push('/leads/add'),
+      ),
     );
   }
 
   Widget _buildGridView(List<LeadModel> leads) {
     return GridView.builder(
       padding: const EdgeInsets.all(16),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: MediaQuery.of(context).size.width > 1200 ? 3 : 2,
         childAspectRatio: 0.85,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
@@ -379,12 +565,34 @@ class _LeadListScreenState extends ConsumerState<LeadListScreen>
 
   Widget _buildFloatingActionButton() {
     return FloatingActionButton.extended(
-      onPressed: _navigateToAddLead,
+      onPressed: () => context.push('/leads/add'),
       backgroundColor: AppColors.primary,
       foregroundColor: AppColors.textOnPrimary,
       icon: const Icon(LucideIcons.plus),
       label: const Text('Add Lead'),
-    );
+    ).animate()
+        .scale(begin: const Offset(0.8, 0.8), duration: 600.ms, delay: 1000.ms)
+        .fadeIn(duration: 300.ms, delay: 1000.ms);
+  }
+
+  List<LeadModel> _filterLeads(List<LeadModel> leads, String filter) {
+    switch (filter) {
+      case 'active':
+        return leads.where((lead) => lead.isActive).toList();
+      case 'followup':
+        return leads.where((lead) => lead.hasFollowUpDue).toList();
+      case 'converted':
+        return leads.where((lead) => lead.isConverted).toList();
+      case 'overdue':
+        return leads.where((lead) => lead.isFollowUpOverdue).toList();
+      default:
+        return leads;
+    }
+  }
+
+  void _applyFilter(String filter) {
+    // This could update a provider for more complex filtering
+    // For now, the tab system handles basic filtering
   }
 
   void _toggleView() {
@@ -393,80 +601,22 @@ class _LeadListScreenState extends ConsumerState<LeadListScreen>
     });
   }
 
-  Future<void> _selectDateRange() async {
-    final dateRange = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-      initialDateRange: ref.read(leadDateFilterProvider),
-    );
+  void _handleSort(String sortType) {
+    // Update sort in provider
+    final sortBy = sortType.split('_')[0];
+    ref.read(leadSortProvider.notifier).updateSort(sortBy);
+  }
 
-    if (dateRange != null) {
-      ref.read(leadDateFilterProvider.notifier).state = dateRange;
+  void _handleMenuAction(String action) {
+    switch (action) {
+      case 'refresh':
+        ref.read(dashboardRefreshProvider.notifier).refresh();
+        AppHelpers.showSuccessSnackbar(context, 'Leads refreshed');
+        break;
+      case 'export':
+        _exportLeads();
+        break;
     }
-  }
-
-  void _showFilterDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Filter Leads'),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Advanced filtering options coming soon...'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showSortDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Sort Leads'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: const Text('Updated Date'),
-              onTap: () {
-                ref.read(leadSortProvider.notifier).updateSort('updatedAt');
-                Navigator.of(context).pop();
-              },
-            ),
-            ListTile(
-              title: const Text('Created Date'),
-              onTap: () {
-                ref.read(leadSortProvider.notifier).updateSort('createdAt');
-                Navigator.of(context).pop();
-              },
-            ),
-            ListTile(
-              title: const Text('Status'),
-              onTap: () {
-                ref.read(leadSortProvider.notifier).updateSort('status');
-                Navigator.of(context).pop();
-              },
-            ),
-            ListTile(
-              title: const Text('Follow-up Date'),
-              onTap: () {
-                ref.read(leadSortProvider.notifier).updateSort('followUpDate');
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   void _toggleLeadSelection(String leadId) {
@@ -475,10 +625,6 @@ class _LeadListScreenState extends ConsumerState<LeadListScreen>
 
   void _navigateToLeadDetail(String leadId) {
     context.push('/leads/detail/$leadId');
-  }
-
-  void _navigateToAddLead() {
-    context.push('/leads/add');
   }
 
   Future<void> _bulkUpdateStatus() async {
@@ -494,7 +640,7 @@ class _LeadListScreenState extends ConsumerState<LeadListScreen>
         ref.read(selectedLeadsProvider.notifier).clearSelection();
         AppHelpers.showSuccessSnackbar(
           context,
-          'Updated ${selectedLeads.length} lead(s)',
+          'Updated ${selectedLeads.length} lead(s) to $newStatus',
         );
       }
     }
@@ -504,8 +650,8 @@ class _LeadListScreenState extends ConsumerState<LeadListScreen>
     final selectedLeads = ref.read(selectedLeadsProvider);
     if (selectedLeads.isEmpty) return;
 
-    // Show user selector dialog
-    AppHelpers.showInfoSnackbar(context, 'Assign feature coming soon');
+    // Show user selector dialog - simplified for now
+    AppHelpers.showInfoSnackbar(context, 'Bulk assign feature coming soon');
   }
 
   Future<void> _bulkDelete() async {
@@ -515,7 +661,7 @@ class _LeadListScreenState extends ConsumerState<LeadListScreen>
     final confirm = await AppHelpers.showConfirmDialog(
       context,
       title: 'Delete Leads',
-      content: 'Are you sure you want to delete ${selectedLeads.length} lead(s)?',
+      content: 'Are you sure you want to delete ${selectedLeads.length} lead(s)? This action cannot be undone.',
       confirmText: 'Delete',
     );
 
@@ -537,7 +683,7 @@ class _LeadListScreenState extends ConsumerState<LeadListScreen>
     return showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Select Status'),
+        title: const Text('Update Status'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -545,10 +691,23 @@ class _LeadListScreenState extends ConsumerState<LeadListScreen>
             'Visit Done', 'Negotiation', 'Converted', 'Lost'
           ].map((status) => ListTile(
             title: Text(status),
+            leading: Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                color: AppHelpers.getStatusColor(status),
+                borderRadius: BorderRadius.circular(6),
+              ),
+            ),
             onTap: () => Navigator.of(context).pop(status),
           )).toList(),
         ),
       ),
     );
+  }
+
+  void _exportLeads() {
+    // Export functionality
+    AppHelpers.showInfoSnackbar(context, 'Export feature coming soon');
   }
 }
