@@ -7,30 +7,30 @@ import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/theme/custom_widgets.dart';
-import '../../../core/utils/helpers.dart';
-import '../../../core/navigation/route_names.dart'; // Import RouteNames
+import '../../../core/utils/helpers.dart'; // For AppHelpers
+import '../../../core/navigation/route_names.dart'; // For RouteNames
 
-class LeaderSettingsScreen extends ConsumerStatefulWidget {
-  const LeaderSettingsScreen({super.key});
+class ReportsScreen extends ConsumerStatefulWidget {
+  const ReportsScreen({super.key});
 
   @override
-  ConsumerState<LeaderSettingsScreen> createState() => _LeaderSettingsScreenState();
+  ConsumerState<ReportsScreen> createState() => _ReportsScreenState();
 }
 
-class _LeaderSettingsScreenState extends ConsumerState<LeaderSettingsScreen> {
+class _ReportsScreenState extends ConsumerState<ReportsScreen> {
   @override
   Widget build(BuildContext context) {
     final currentUser = ref.watch(currentUserProvider);
 
     return currentUser.when(
       data: (user) {
-        if (user == null || (!user.isLeader && !user.isClassLeader && !user.isAdmin)) {
+        if (user == null) {
           return const Scaffold(
             body: Center(
               child: EmptyState(
                 icon: LucideIcons.lock,
                 title: 'Access Denied',
-                subtitle: 'Only leaders or administrators can access team settings',
+                subtitle: 'You must be logged in to view reports',
               ),
             ),
           );
@@ -52,36 +52,95 @@ class _LeaderSettingsScreenState extends ConsumerState<LeaderSettingsScreen> {
 
                 const SizedBox(height: 32),
 
-                // Team Configuration
-                _buildTeamConfigSection()
-                    .animate()
-                    .fadeIn(duration: 600.ms, delay: 200.ms)
-                    .slideY(begin: 0.3, duration: 600.ms),
+                // Performance Reports
+                _buildReportsSection(
+                  title: 'Performance Reports',
+                  subtitle: 'Analyze individual and team performance over time',
+                  icon: LucideIcons.barChart2,
+                  children: [
+                    _buildReportItem(
+                      title: 'My Performance',
+                      subtitle: 'Detailed report of your personal lead metrics',
+                      icon: LucideIcons.user,
+                      onTap: () => AppHelpers.showInfoSnackbar(context, 'Navigate to My Performance Report'),
+                      trailing: const Icon(LucideIcons.chevronRight),
+                    ),
+                    if (user.canManageUsers) // Leaders and Admins can see team reports
+                      _buildReportItem(
+                        title: 'Team Performance',
+                        subtitle: 'Overview of your team\'s lead and activity performance',
+                        icon: LucideIcons.users,
+                        onTap: () => AppHelpers.showInfoSnackbar(context, 'Navigate to Team Performance Report'),
+                        trailing: const Icon(LucideIcons.chevronRight),
+                      ),
+                    if (user.isAdmin) // Admins can see overall system performance
+                      _buildReportItem(
+                        title: 'System Performance',
+                        subtitle: 'Comprehensive analytics across all users and teams',
+                        icon: LucideIcons.shield,
+                        onTap: () => AppHelpers.showInfoSnackbar(context, 'Navigate to System Performance Report'),
+                        trailing: const Icon(LucideIcons.chevronRight),
+                      ),
+                  ],
+                ).animate().fadeIn(duration: 600.ms, delay: 200.ms).slideY(begin: 0.3, duration: 600.ms),
 
                 const SizedBox(height: 24),
 
-                // Lead Management Settings
-                _buildLeadManagementSettingsSection()
-                    .animate()
-                    .fadeIn(duration: 600.ms, delay: 400.ms)
-                    .slideY(begin: 0.3, duration: 600.ms),
+                // Lead Analytics Reports
+                _buildReportsSection(
+                  title: 'Lead Analytics Reports',
+                  subtitle: 'Insights into lead pipeline, conversion rates, and sources',
+                  icon: LucideIcons.target,
+                  children: [
+                    _buildReportItem(
+                      title: 'Lead Conversion Funnel',
+                      subtitle: 'Visualize lead progression through different stages',
+                      icon: LucideIcons.funnel,
+                      onTap: () => AppHelpers.showInfoSnackbar(context, 'Navigate to Lead Conversion Funnel'),
+                      trailing: const Icon(LucideIcons.chevronRight),
+                    ),
+                    _buildReportItem(
+                      title: 'Lead Source Analysis',
+                      subtitle: 'Breakdown of leads by their origination source',
+                      icon: LucideIcons.globe,
+                      onTap: () => AppHelpers.showInfoSnackbar(context, 'Navigate to Lead Source Analysis'),
+                      trailing: const Icon(LucideIcons.chevronRight),
+                    ),
+                    _buildReportItem(
+                      title: 'Follow-up Effectiveness',
+                      subtitle: 'Analyze the impact of follow-ups on lead conversion',
+                      icon: LucideIcons.clock,
+                      onTap: () => AppHelpers.showInfoSnackbar(context, 'Navigate to Follow-up Effectiveness Report'),
+                      trailing: const Icon(LucideIcons.chevronRight),
+                    ),
+                  ],
+                ).animate().fadeIn(duration: 600.ms, delay: 400.ms).slideY(begin: 0.3, duration: 600.ms),
 
                 const SizedBox(height: 24),
 
-                // Notifications
-                _buildNotificationSettingsSection()
-                    .animate()
-                    .fadeIn(duration: 600.ms, delay: 600.ms)
-                    .slideY(begin: 0.3, duration: 600.ms),
-
-                const SizedBox(height: 24),
-
-                // Account & Billing (for Leaders)
-                if (user.isLeader || user.isAdmin)
-                  _buildAccountAndBillingSection()
-                      .animate()
-                      .fadeIn(duration: 600.ms, delay: 800.ms)
-                      .slideY(begin: 0.3, duration: 600.ms),
+                // User & Team Reports
+                if (user.canManageUsers)
+                  _buildReportsSection(
+                    title: 'User & Team Reports',
+                    subtitle: 'Detailed reports on user activity and team structure',
+                    icon: LucideIcons.users,
+                    children: [
+                      _buildReportItem(
+                        title: 'User Activity Log',
+                        subtitle: 'Track actions performed by individual users',
+                        icon: LucideIcons.history,
+                        onTap: () => AppHelpers.showInfoSnackbar(context, 'Navigate to User Activity Log'),
+                        trailing: const Icon(LucideIcons.chevronRight),
+                      ),
+                      _buildReportItem(
+                        title: 'Team Hierarchy Overview',
+                        subtitle: 'Visualize the organizational structure of teams',
+                        icon: LucideIcons.network,
+                        onTap: () => AppHelpers.showInfoSnackbar(context, 'Navigate to Team Hierarchy Overview'),
+                        trailing: const Icon(LucideIcons.chevronRight),
+                      ),
+                    ],
+                  ).animate().fadeIn(duration: 600.ms, delay: 600.ms).slideY(begin: 0.3, duration: 600.ms),
               ],
             ),
           ),
@@ -99,12 +158,12 @@ class _LeaderSettingsScreenState extends ConsumerState<LeaderSettingsScreen> {
       title: Row(
         children: [
           Icon(
-            LucideIcons.settings,
+            LucideIcons.barChart,
             color: AppColors.primary,
             size: 24,
           ),
           const SizedBox(width: 8),
-          const Text('Team Settings'),
+          const Text('Reports'),
         ],
       ),
       elevation: 0,
@@ -144,7 +203,7 @@ class _LeaderSettingsScreenState extends ConsumerState<LeaderSettingsScreen> {
               borderRadius: BorderRadius.circular(16),
             ),
             child: const Icon(
-              LucideIcons.users,
+              LucideIcons.barChart,
               color: AppColors.textOnPrimary,
               size: 30,
             ),
@@ -155,7 +214,7 @@ class _LeaderSettingsScreenState extends ConsumerState<LeaderSettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '$roleDisplayName Settings',
+                  'Analytics & Reports',
                   style: AppTextStyles.headlineSmall.copyWith(
                     color: AppColors.textOnPrimary,
                     fontWeight: FontWeight.bold,
@@ -163,7 +222,7 @@ class _LeaderSettingsScreenState extends ConsumerState<LeaderSettingsScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Manage your team\'s preferences and lead settings',
+                  'Access detailed insights into leads, users, and team performance.',
                   style: AppTextStyles.bodyMedium.copyWith(
                     color: AppColors.textOnPrimary.withOpacity(0.9),
                   ),
@@ -176,124 +235,7 @@ class _LeaderSettingsScreenState extends ConsumerState<LeaderSettingsScreen> {
     );
   }
 
-  Widget _buildTeamConfigSection() {
-    return _buildSettingsSection(
-      title: 'Team Configuration',
-      subtitle: 'Manage team structure and member roles',
-      icon: LucideIcons.users,
-      children: [
-        _buildSettingsItem(
-          title: 'Manage Team Members',
-          subtitle: 'View and manage members in your team',
-          icon: LucideIcons.user,
-          onTap: () => AppHelpers.showInfoSnackbar(context, 'Navigate to Manage Team Members'),
-          trailing: const Icon(LucideIcons.chevronRight),
-        ),
-        _buildSettingsItem(
-          title: 'Join Requests',
-          subtitle: 'Review and approve new member requests',
-          icon: LucideIcons.userPlus,
-          onTap: () => AppHelpers.showInfoSnackbar(context, 'Navigate to Join Requests'),
-          trailing: const Icon(LucideIcons.chevronRight),
-        ),
-        _buildSettingsItem(
-          title: 'Assign Telecallers',
-          subtitle: 'Assign telecallers to class leaders',
-          icon: LucideIcons.userCheck,
-          onTap: () => AppHelpers.showInfoSnackbar(context, 'Navigate to Assign Telecallers'),
-          trailing: const Icon(LucideIcons.chevronRight),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildLeadManagementSettingsSection() {
-    return _buildSettingsSection(
-      title: 'Lead Management Settings',
-      subtitle: 'Customize lead statuses and custom fields for your team',
-      icon: LucideIcons.target,
-      children: [
-        _buildSettingsItem(
-          title: 'Manage Lead Statuses',
-          subtitle: 'Add, edit, or reorder lead statuses',
-          icon: LucideIcons.flag,
-          onTap: () => Navigator.of(context).pushNamed(RouteNames.manageStatuses),
-          trailing: const Icon(LucideIcons.chevronRight),
-        ),
-        _buildSettingsItem(
-          title: 'Manage Custom Fields',
-          subtitle: 'Define custom fields for lead information',
-          icon: LucideIcons.grid3x3,
-          onTap: () => Navigator.of(context).pushNamed(RouteNames.manageFields),
-          trailing: const Icon(LucideIcons.chevronRight),
-        ),
-        _buildSettingsItem(
-          title: 'Lead Assignment Rules',
-          subtitle: 'Set rules for automated lead distribution',
-          icon: LucideIcons.share,
-          onTap: () => AppHelpers.showInfoSnackbar(context, 'Configure Lead Assignment Rules'),
-          trailing: const Icon(LucideIcons.chevronRight),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNotificationSettingsSection() {
-    return _buildSettingsSection(
-      title: 'Notification Settings',
-      subtitle: 'Control team-wide notification preferences',
-      icon: LucideIcons.bell,
-      children: [
-        _buildSettingsItem(
-          title: 'Team Activity Alerts',
-          subtitle: 'Receive alerts for team member activities',
-          icon: LucideIcons.activity,
-          onTap: () => AppHelpers.showInfoSnackbar(context, 'Configure Team Activity Alerts'),
-          trailing: Switch(value: true, onChanged: (value) {}),
-        ),
-        _buildSettingsItem(
-          title: 'Lead Update Notifications',
-          subtitle: 'Get notified about changes to assigned leads',
-          icon: LucideIcons.bellRing,
-          onTap: () => AppHelpers.showInfoSnackbar(context, 'Configure Lead Update Notifications'),
-          trailing: Switch(value: true, onChanged: (value) {}),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAccountAndBillingSection() {
-    return _buildSettingsSection(
-      title: 'Account & Billing',
-      subtitle: 'Manage your subscription and account details',
-      icon: LucideIcons.dollarSign,
-      children: [
-        _buildSettingsItem(
-          title: 'Subscription Status',
-          subtitle: 'View your current plan and renewal date',
-          icon: LucideIcons.creditCard,
-          onTap: () => AppHelpers.showInfoSnackbar(context, 'View Subscription Status'),
-          trailing: const Icon(LucideIcons.chevronRight),
-        ),
-        _buildSettingsItem(
-          title: 'Payment Methods',
-          subtitle: 'Manage your payment information',
-          icon: LucideIcons.wallet,
-          onTap: () => AppHelpers.showInfoSnackbar(context, 'Manage Payment Methods'),
-          trailing: const Icon(LucideIcons.chevronRight),
-        ),
-        _buildSettingsItem(
-          title: 'Billing History',
-          subtitle: 'View past invoices and transactions',
-          icon: LucideIcons.receipt,
-          onTap: () => AppHelpers.showInfoSnackbar(context, 'View Billing History'),
-          trailing: const Icon(LucideIcons.chevronRight),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSettingsSection({
+  Widget _buildReportsSection({
     required String title,
     required String subtitle,
     required IconData icon,
@@ -348,7 +290,7 @@ class _LeaderSettingsScreenState extends ConsumerState<LeaderSettingsScreen> {
     );
   }
 
-  Widget _buildSettingsItem({
+  Widget _buildReportItem({
     required String title,
     required String subtitle,
     required IconData icon,

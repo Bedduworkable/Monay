@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "369016013249",
+    "project_id": "igplmonday",
+    "storage_bucket": "igplmonday.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:369016013249:android:3c809d1ddc2d6b0c7cef40",
+        "android_client_info": {
+          "package_name": "com.example.igplmonday"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCjjZ5CWKkCOZYFzixH6HzXLoJ2Ok6QBjo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
